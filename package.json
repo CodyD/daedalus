@@ -1,0 +1,59 @@
+{
+  "name": "daedalus",
+  "productName": "Daedalus",
+  "version": "0.1.0",
+  "description": "Mixed-mode circuit simulator with microcontroller co-simulation and AI datasheet import",
+  "author": "CodyD",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "asm": "node --experimental-strip-types scripts/asm.ts",
+    "dist": "electron-vite build && electron-builder --win portable",
+    "db:seed": "tsx scripts/seed-parts.ts",
+    "readme": "tsx scripts/readme/build.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "electron": "^44.7.2",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^6.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.134.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@neondatabase/serverless": "^1.2.0",
+    "pdf-lib": "^1.17.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "zod": "^4.6.7"
+  },
+  "build": {
+    "appId": "com.codyd.daedalus",
+    "productName": "Daedalus",
+    "files": [
+      "out/**",
+      "examples/**",
+      "package.json"
+    ],
+    "win": {
+      "target": "portable"
+    },
+    "directories": {
+      "output": "release"
+    }
+  }
+}

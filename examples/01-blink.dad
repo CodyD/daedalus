@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "name": "01 LED blink (Timer1 interrupt)",
+  "parts": [
+    {
+      "ref": "U1",
+      "defId": "ATMEGA328P",
+      "x": 0,
+      "y": 0,
+      "rot": 0,
+      "props": {
+        "PROGRAM": "src:blink.asm"
+      }
+    },
+    {
+      "ref": "R1",
+      "defId": "RES",
+      "x": 200,
+      "y": 10,
+      "rot": 0,
+      "props": {
+        "R": "330"
+      }
+    },
+    {
+      "ref": "D1",
+      "defId": "LED-RED",
+      "x": 300,
+      "y": 10,
+      "rot": 0,
+      "props": {}
+    },
+    {
+      "ref": "GND3",
+      "defId": "GROUND",
+      "x": 330,
+      "y": 50,
+      "rot": 0,
+      "props": {}
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "points": [
+        [
+          90,
+          10
+        ],
+        [
+          160,
+          10
+        ]
+      ]
+    },
+    {
+      "id": "w2",
+      "points": [
+        [
+          240,
+          10
+        ],
+        [
+          270,
+          10
+        ]
+      ]
+    },
+    {
+      "id": "w4",
+      "points": [
+        [
+          330,
+          10
+        ],
+        [
+          330,
+          40
+        ]
+      ]
+    }
+  ],
+  "sources": {
+    "blink.asm": "; LED blink on PB5 (Arduino pin 13) using Timer1 in CTC mode.\n; 16 MHz / 1024 / (7812 + 1) = 2 Hz interrupt -> LED toggles every 0.5 s.\n\n.org 0\n        jmp reset\n.org 0x16                       ; TIMER1_COMPA (vector 11)\n        jmp timer1_compa\n.org 0x34\nreset:\n        ldi r16, high(RAMEND)\n        out SPH, r16\n        ldi r16, low(RAMEND)\n        out SPL, r16\n\n        sbi DDRB, 5             ; PB5 output\n\n        ldi r16, high(7812)     ; 16-bit write: high byte first\n        sts OCR1AH, r16\n        ldi r16, low(7812)\n        sts OCR1AL, r16\n        ldi r16, (1<<WGM12)|(1<<CS12)|(1<<CS10)   ; CTC, clk/1024\n        sts TCCR1B, r16\n        ldi r16, 1<<OCIE1A\n        sts TIMSK1, r16\n        sei\nidle:\n        rjmp idle\n\ntimer1_compa:\n        sbi PINB, 5             ; writing 1 to PINx toggles PORTx\n        reti\n"
+  }
+}

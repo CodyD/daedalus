@@ -1,0 +1,11 @@
+node_modules/
+out/
+dist/
+*.log
+.env
+.playwright-mcp/
+release/
+.env.*
+.dev.vars*
+.wrangler/
+/*.bat

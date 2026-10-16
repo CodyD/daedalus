@@ -1,0 +1,239 @@
+{
+  "version": 1,
+  "name": "03 LCD 16x2 (HD44780, 4-bit)",
+  "parts": [
+    {
+      "ref": "U1",
+      "defId": "ATMEGA328P",
+      "x": 0,
+      "y": 0,
+      "rot": 0,
+      "props": {
+        "PROGRAM": "src:lcd.asm"
+      }
+    },
+    {
+      "ref": "LCD1",
+      "defId": "LCD1602",
+      "x": -300,
+      "y": -300,
+      "rot": 0,
+      "props": {}
+    },
+    {
+      "ref": "GND7",
+      "defId": "GROUND",
+      "x": -370,
+      "y": -210,
+      "rot": 0,
+      "props": {}
+    },
+    {
+      "ref": "GND9",
+      "defId": "GROUND",
+      "x": -330,
+      "y": -210,
+      "rot": 0,
+      "props": {}
+    },
+    {
+      "ref": "GND11",
+      "defId": "GROUND",
+      "x": -350,
+      "y": -210,
+      "rot": 0,
+      "props": {}
+    },
+    {
+      "ref": "PWR_LCD",
+      "defId": "POWER",
+      "x": -420,
+      "y": -260,
+      "rot": 0,
+      "props": {}
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "points": [
+        [
+          -270,
+          -240
+        ],
+        [
+          -270,
+          20
+        ],
+        [
+          -90,
+          20
+        ]
+      ]
+    },
+    {
+      "id": "w2",
+      "points": [
+        [
+          -260,
+          -240
+        ],
+        [
+          -260,
+          40
+        ],
+        [
+          -90,
+          40
+        ]
+      ]
+    },
+    {
+      "id": "w3",
+      "points": [
+        [
+          -250,
+          -240
+        ],
+        [
+          -250,
+          60
+        ],
+        [
+          -90,
+          60
+        ]
+      ]
+    },
+    {
+      "id": "w4",
+      "points": [
+        [
+          -240,
+          -240
+        ],
+        [
+          -240,
+          80
+        ],
+        [
+          -90,
+          80
+        ]
+      ]
+    },
+    {
+      "id": "w5",
+      "points": [
+        [
+          -340,
+          -240
+        ],
+        [
+          -340,
+          -190
+        ],
+        [
+          150,
+          -190
+        ],
+        [
+          150,
+          -90
+        ],
+        [
+          90,
+          -90
+        ]
+      ]
+    },
+    {
+      "id": "w6",
+      "points": [
+        [
+          -320,
+          -240
+        ],
+        [
+          -320,
+          -180
+        ],
+        [
+          140,
+          -180
+        ],
+        [
+          140,
+          -70
+        ],
+        [
+          90,
+          -70
+        ]
+      ]
+    },
+    {
+      "id": "w8",
+      "points": [
+        [
+          -370,
+          -240
+        ],
+        [
+          -370,
+          -220
+        ]
+      ]
+    },
+    {
+      "id": "w10",
+      "points": [
+        [
+          -330,
+          -240
+        ],
+        [
+          -330,
+          -220
+        ]
+      ]
+    },
+    {
+      "id": "w12",
+      "points": [
+        [
+          -350,
+          -240
+        ],
+        [
+          -350,
+          -220
+        ]
+      ]
+    },
+    {
+      "id": "w13",
+      "points": [
+        [
+          -360,
+          -240
+        ],
+        [
+          -360,
+          -225
+        ],
+        [
+          -420,
+          -225
+        ],
+        [
+          -420,
+          -250
+        ]
+      ]
+    }
+  ],
+  "sources": {
+    "lcd.asm": "; HD44780 16x2 LCD in 4-bit mode (same wiring as the Arduino LiquidCrystal\n; examples): RS = PB0, E = PB1, D4..D7 = PD4..PD7, RW tied to ground.\n; Shows a greeting and a counter that ticks every 250 ms.\n\n.def tmp  = r16\n.def arg  = r17\n.def aux  = r19\n.def n    = r20\n.def val  = r21\n.def dig  = r22\n\n.org 0\n        rjmp reset\nreset:\n        ldi tmp, high(RAMEND)\n        out SPH, tmp\n        ldi tmp, low(RAMEND)\n        out SPL, tmp\n        ldi tmp, 0xF0\n        out DDRD, tmp           ; D4..D7 outputs\n        ldi tmp, 0x03\n        out DDRB, tmp           ; RS, E outputs\n\n        ldi arg, 50\n        rcall delay_ms          ; power-on wait\n\n        ldi arg, 0x30           ; reset sequence: 3 x \"8-bit mode\", then 4-bit\n        rcall nibble\n        ldi arg, 5\n        rcall delay_ms\n        ldi arg, 0x30\n        rcall nibble\n        rcall delay_50us\n        ldi arg, 0x30\n        rcall nibble\n        rcall delay_50us\n        ldi arg, 0x20\n        rcall nibble\n        rcall delay_50us\n\n        ldi arg, 0x28           ; 4-bit, 2 lines, 5x8 font\n        rcall command\n        ldi arg, 0x0C           ; display on, cursor off\n        rcall command\n        ldi arg, 0x06           ; increment, no shift\n        rcall command\n        ldi arg, 0x01           ; clear\n        rcall command\n        ldi arg, 2\n        rcall delay_ms\n\n        ldi ZL, low(line1*2)\n        ldi ZH, high(line1*2)\n        rcall puts\n        ldi arg, 0xC0           ; DDRAM 0x40: start of line 2\n        rcall command\n        ldi ZL, low(line2*2)\n        ldi ZH, high(line2*2)\n        rcall puts\n        clr n\nloop:\n        ldi arg, 0xC0 + 9\n        rcall command\n        mov val, n\n        ldi dig, '0' - 1        ; hundreds\nhundreds:\n        inc dig\n        subi val, 100\n        brcc hundreds\n        subi val, -100\n        mov arg, dig\n        rcall data\n        ldi dig, '0' - 1        ; tens\ntens:\n        inc dig\n        subi val, 10\n        brcc tens\n        subi val, -10\n        mov arg, dig\n        rcall data\n        mov arg, val            ; ones\n        subi arg, -'0'\n        rcall data\n        inc n\n        ldi arg, 250\n        rcall delay_ms\n        rjmp loop\n\ncommand:                        ; RS = 0\n        cbi PORTB, 0\n        rjmp send\ndata:                           ; RS = 1\n        sbi PORTB, 0\nsend:\n        push arg\n        rcall nibble            ; high nibble\n        pop arg\n        swap arg\n        rcall nibble            ; low nibble\n        rjmp delay_50us\n\nnibble:                         ; put arg[7:4] on D4..D7 and pulse E\n        in tmp, PORTD\n        andi tmp, 0x0F\n        mov aux, arg\n        andi aux, 0xF0\n        or tmp, aux\n        out PORTD, tmp\n        sbi PORTB, 1\n        nop\n        nop\n        cbi PORTB, 1            ; LCD latches on the falling edge\n        ret\n\nputs:                           ; write zero-terminated flash string at Z\n        lpm arg, Z+\n        tst arg\n        breq puts_end\n        rcall data\n        rjmp puts\nputs_end:\n        ret\n\ndelay_50us:                     ; 200 x 4 cycles = 800 cycles = 50 us\n        ldi r24, 200\nd50:\n        nop\n        dec r24\n        brne d50\n        ret\n\ndelay_ms:                       ; arg milliseconds (4000 x 4 cycles per ms)\n        ldi r24, low(3999)\n        ldi r25, high(3999)\ndms:\n        sbiw r24, 1\n        brne dms\n        dec arg\n        brne delay_ms\n        ret\n\nline1:  .db \"Hello, Daedalus!\", 0\nline2:  .db \"Counter: \", 0\n"
+  }
+}

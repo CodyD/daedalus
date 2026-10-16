@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "name": "02 Serial terminal echo (USART + RX interrupt)",
+  "parts": [
+    {
+      "ref": "U1",
+      "defId": "ATMEGA328P",
+      "x": 0,
+      "y": 0,
+      "rot": 0,
+      "props": {
+        "PROGRAM": "src:serial.asm"
+      }
+    },
+    {
+      "ref": "T1",
+      "defId": "VTERM",
+      "x": -320,
+      "y": -50,
+      "rot": 0,
+      "props": {
+        "BAUD": "9600"
+      }
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "points": [
+        [
+          -370,
+          -60
+        ],
+        [
+          -400,
+          -60
+        ],
+        [
+          -400,
+          -120
+        ],
+        [
+          -120,
+          -120
+        ],
+        [
+          -120,
+          -40
+        ],
+        [
+          -90,
+          -40
+        ]
+      ]
+    },
+    {
+      "id": "w2",
+      "points": [
+        [
+          -370,
+          -40
+        ],
+        [
+          -390,
+          -40
+        ],
+        [
+          -390,
+          -100
+        ],
+        [
+          -140,
+          -100
+        ],
+        [
+          -140,
+          -60
+        ],
+        [
+          -90,
+          -60
+        ]
+      ]
+    }
+  ],
+  "sources": {
+    "serial.asm": "; USART demo: prints a banner, then echoes everything typed in the virtual\n; terminal back in upper case. 9600 baud 8N1 at 16 MHz. Interrupt-driven RX.\n\n.def tmp  = r16\n.def ch   = r17\n\n.org 0\n        jmp reset\n.org 0x24                       ; USART_RX (vector 18)\n        jmp usart_rx\n.org 0x34\nreset:\n        ldi tmp, high(RAMEND)\n        out SPH, tmp\n        ldi tmp, low(RAMEND)\n        out SPL, tmp\n\n        ldi tmp, 103            ; UBRR = 16e6 / (16 * 9600) - 1\n        sts UBRR0L, tmp\n        ldi tmp, (1<<RXEN0)|(1<<TXEN0)|(1<<RXCIE0)\n        sts UCSR0B, tmp\n        ldi tmp, (1<<UCSZ01)|(1<<UCSZ00)\n        sts UCSR0C, tmp\n\n        ldi ZL, low(banner*2)\n        ldi ZH, high(banner*2)\n        rcall puts\n        sei\nidle:\n        rjmp idle\n\n; RX complete: upper-case and echo; Enter prints a new prompt.\nusart_rx:\n        push tmp\n        in tmp, SREG\n        push tmp\n        lds ch, UDR0\n        cpi ch, 13\n        brne not_cr\n        ldi ZL, low(prompt*2)\n        ldi ZH, high(prompt*2)\n        rcall puts\n        rjmp rx_done\nnot_cr:\n        cpi ch, 'a'\n        brlo send\n        cpi ch, 'z'+1\n        brsh send\n        subi ch, 32\nsend:\n        rcall putc\nrx_done:\n        pop tmp\n        out SREG, tmp\n        pop tmp\n        reti\n\nputc:                           ; transmit ch, waiting for an empty buffer\n        lds tmp, UCSR0A\n        sbrs tmp, UDRE0\n        rjmp putc\n        sts UDR0, ch\n        ret\n\nputs:                           ; transmit zero-terminated string at Z (flash)\n        lpm ch, Z+\n        tst ch\n        breq puts_end\n        rcall putc\n        rjmp puts\nputs_end:\n        ret\n\nbanner: .db \"Daedalus serial demo\", 13, 10, \"Type something:\", 13, 10, \"> \", 0\nprompt: .db 13, 10, \"> \", 0\n"
+  }
+}

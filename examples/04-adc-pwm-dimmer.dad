@@ -1,0 +1,216 @@
+{
+  "version": 1,
+  "name": "04 ADC to PWM dimmer with oscilloscope",
+  "parts": [
+    {
+      "ref": "U1",
+      "defId": "ATMEGA328P",
+      "x": 0,
+      "y": 0,
+      "rot": 0,
+      "props": {
+        "PROGRAM": "src:dimmer.asm"
+      }
+    },
+    {
+      "ref": "RV1",
+      "defId": "POT",
+      "x": 250,
+      "y": 150,
+      "rot": 0,
+      "props": {
+        "R": "10k",
+        "POSITION": "0.5"
+      }
+    },
+    {
+      "ref": "R1",
+      "defId": "RES",
+      "x": -200,
+      "y": 60,
+      "rot": 0,
+      "props": {
+        "R": "220"
+      }
+    },
+    {
+      "ref": "D1",
+      "defId": "LED-GREEN",
+      "x": -300,
+      "y": 60,
+      "rot": 180,
+      "props": {}
+    },
+    {
+      "ref": "OSC1",
+      "defId": "SCOPE",
+      "x": 400,
+      "y": -50,
+      "rot": 0,
+      "props": {
+        "TIMEBASE": "5m"
+      }
+    },
+    {
+      "ref": "PWR1",
+      "defId": "POWER",
+      "x": 190,
+      "y": 110,
+      "rot": 0,
+      "props": {}
+    },
+    {
+      "ref": "GND3",
+      "defId": "GROUND",
+      "x": 310,
+      "y": 190,
+      "rot": 0,
+      "props": {}
+    },
+    {
+      "ref": "GND7",
+      "defId": "GROUND",
+      "x": -330,
+      "y": 100,
+      "rot": 0,
+      "props": {}
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "points": [
+        [
+          250,
+          120
+        ],
+        [
+          250,
+          30
+        ],
+        [
+          90,
+          30
+        ]
+      ]
+    },
+    {
+      "id": "w2",
+      "points": [
+        [
+          210,
+          150
+        ],
+        [
+          190,
+          150
+        ],
+        [
+          190,
+          120
+        ]
+      ]
+    },
+    {
+      "id": "w4",
+      "points": [
+        [
+          290,
+          150
+        ],
+        [
+          310,
+          150
+        ],
+        [
+          310,
+          180
+        ]
+      ]
+    },
+    {
+      "id": "w5",
+      "points": [
+        [
+          -90,
+          60
+        ],
+        [
+          -160,
+          60
+        ]
+      ]
+    },
+    {
+      "id": "w6",
+      "points": [
+        [
+          -240,
+          60
+        ],
+        [
+          -270,
+          60
+        ]
+      ]
+    },
+    {
+      "id": "w8",
+      "points": [
+        [
+          -330,
+          60
+        ],
+        [
+          -330,
+          90
+        ]
+      ]
+    },
+    {
+      "id": "w9",
+      "points": [
+        [
+          350,
+          -60
+        ],
+        [
+          250,
+          -60
+        ],
+        [
+          250,
+          30
+        ]
+      ]
+    },
+    {
+      "id": "w10",
+      "points": [
+        [
+          350,
+          -80
+        ],
+        [
+          330,
+          -80
+        ],
+        [
+          330,
+          -220
+        ],
+        [
+          -130,
+          -220
+        ],
+        [
+          -130,
+          60
+        ]
+      ]
+    }
+  ],
+  "sources": {
+    "dimmer.asm": "; Potentiometer dimmer: ADC0 (PC0) is read continuously and copied to the\n; Timer0 PWM duty cycle on OC0A (PD6). Fast PWM, clk/64 -> 976 Hz.\n\n.def tmp = r16\n\n.org 0\n        rjmp reset\nreset:\n        ldi tmp, high(RAMEND)\n        out SPH, tmp\n        ldi tmp, low(RAMEND)\n        out SPL, tmp\n\n        sbi DDRD, 6                                 ; OC0A output\n        ldi tmp, (1<<COM0A1)|(1<<WGM01)|(1<<WGM00)  ; fast PWM, non-inverting\n        out TCCR0A, tmp\n        ldi tmp, (1<<CS01)|(1<<CS00)                ; clk/64\n        out TCCR0B, tmp\n\n        ldi tmp, (1<<REFS0)|(1<<ADLAR)              ; AVcc reference, ADC0, 8-bit result in ADCH\n        sts ADMUX, tmp\nconvert:\n        ldi tmp, (1<<ADEN)|(1<<ADSC)|(1<<ADPS2)|(1<<ADPS1)|(1<<ADPS0)\n        sts ADCSRA, tmp\nbusy:\n        lds tmp, ADCSRA\n        sbrc tmp, ADSC\n        rjmp busy\n        lds tmp, ADCH\n        out OCR0A, tmp\n        rjmp convert\n"
+  }
+}

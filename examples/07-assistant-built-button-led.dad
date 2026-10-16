@@ -1,0 +1,272 @@
+{
+  "version": 1,
+  "name": "07 Button + LED (built by assistant tools)",
+  "parts": [
+    {
+      "ref": "U1",
+      "defId": "ATMEGA328P",
+      "x": 0,
+      "y": 0,
+      "rot": 0,
+      "props": {
+        "PROGRAM": "src:main.asm"
+      }
+    },
+    {
+      "ref": "R1",
+      "defId": "RES",
+      "x": 360,
+      "y": 0,
+      "rot": 0,
+      "props": {
+        "R": "330"
+      }
+    },
+    {
+      "ref": "D1",
+      "defId": "LED-RED",
+      "x": 680,
+      "y": 0,
+      "rot": 0,
+      "props": {}
+    },
+    {
+      "ref": "SW1",
+      "defId": "BUTTON",
+      "x": 1000,
+      "y": 0,
+      "rot": 0,
+      "props": {}
+    },
+    {
+      "ref": "LBL1",
+      "defId": "NETLABEL",
+      "x": 120,
+      "y": 10,
+      "rot": 0,
+      "props": {
+        "NAME": "LED_DRIVE"
+      }
+    },
+    {
+      "ref": "LBL2",
+      "defId": "NETLABEL",
+      "x": 290,
+      "y": 0,
+      "rot": 180,
+      "props": {
+        "NAME": "LED_DRIVE"
+      }
+    },
+    {
+      "ref": "LBL3",
+      "defId": "NETLABEL",
+      "x": 430,
+      "y": 0,
+      "rot": 0,
+      "props": {
+        "NAME": "LED_A"
+      }
+    },
+    {
+      "ref": "LBL4",
+      "defId": "NETLABEL",
+      "x": 620,
+      "y": 0,
+      "rot": 180,
+      "props": {
+        "NAME": "LED_A"
+      }
+    },
+    {
+      "ref": "GND1",
+      "defId": "GROUND",
+      "x": 730,
+      "y": 10,
+      "rot": 0,
+      "props": {}
+    },
+    {
+      "ref": "GND2",
+      "defId": "GROUND",
+      "x": 1060,
+      "y": 10,
+      "rot": 0,
+      "props": {}
+    },
+    {
+      "ref": "GND3",
+      "defId": "GROUND",
+      "x": -10,
+      "y": 200,
+      "rot": 0,
+      "props": {}
+    },
+    {
+      "ref": "PWR1",
+      "defId": "POWER",
+      "x": -20,
+      "y": -200,
+      "rot": 0,
+      "props": {
+        "NET": "VCC",
+        "VOLTAGE": "5"
+      }
+    },
+    {
+      "ref": "LBL5",
+      "defId": "NETLABEL",
+      "x": -120,
+      "y": -20,
+      "rot": 180,
+      "props": {
+        "NAME": "BTN"
+      }
+    },
+    {
+      "ref": "LBL6",
+      "defId": "NETLABEL",
+      "x": 930,
+      "y": 0,
+      "rot": 180,
+      "props": {
+        "NAME": "BTN"
+      }
+    }
+  ],
+  "wires": [
+    {
+      "id": "aimv9t1azm0fcr",
+      "points": [
+        [
+          90,
+          10
+        ],
+        [
+          110,
+          10
+        ]
+      ]
+    },
+    {
+      "id": "aimv9t1azm117j",
+      "points": [
+        [
+          320,
+          0
+        ],
+        [
+          300,
+          0
+        ]
+      ]
+    },
+    {
+      "id": "aimv9t1azm0jk0",
+      "points": [
+        [
+          400,
+          0
+        ],
+        [
+          420,
+          0
+        ]
+      ]
+    },
+    {
+      "id": "aimv9t1azm1b7f",
+      "points": [
+        [
+          650,
+          0
+        ],
+        [
+          630,
+          0
+        ]
+      ]
+    },
+    {
+      "id": "aimv9t1azm0i2x",
+      "points": [
+        [
+          710,
+          0
+        ],
+        [
+          730,
+          0
+        ]
+      ]
+    },
+    {
+      "id": "aimv9t1azm1nj0",
+      "points": [
+        [
+          1040,
+          0
+        ],
+        [
+          1060,
+          0
+        ]
+      ]
+    },
+    {
+      "id": "aimv9t1azm21gq",
+      "points": [
+        [
+          -10,
+          170
+        ],
+        [
+          -10,
+          190
+        ]
+      ]
+    },
+    {
+      "id": "aimv9t1azm03el",
+      "points": [
+        [
+          -20,
+          -170
+        ],
+        [
+          -20,
+          -190
+        ]
+      ]
+    },
+    {
+      "id": "aimv9t1azm05e6",
+      "points": [
+        [
+          -90,
+          -20
+        ],
+        [
+          -110,
+          -20
+        ]
+      ]
+    },
+    {
+      "id": "aimv9t1azm1yj2",
+      "points": [
+        [
+          960,
+          0
+        ],
+        [
+          940,
+          0
+        ]
+      ]
+    }
+  ],
+  "sources": {
+    "main.asm": "\n        ldi r16, high(RAMEND)\n        out SPH, r16\n        ldi r16, low(RAMEND)\n        out SPL, r16\n        sbi DDRB, 5        ; LED output\n        sbi PORTD, 2       ; button pull-up\nloop:   sbic PIND, 2       ; pressed = low\n        rjmp off\n        sbi PORTB, 5\n        rjmp loop\noff:    cbi PORTB, 5\n        rjmp loop"
+  }
+}
