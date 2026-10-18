@@ -19,11 +19,24 @@ export interface Wire {
   points: [number, number][];
 }
 
+export type Mount = "tht" | "smd";
+export type SmdSize = "0402" | "0603" | "0805" | "1206";
+
+/** Parts list (BOM) preferences, saved with the project. */
+export interface BomSettings {
+  mount: Mount;
+  /** Footprint for chip resistors, capacitors, inductors and LEDs when mounting SMD. */
+  smdSize: SmdSize;
+  /** Per-line overrides, keyed by BomLine.key. */
+  lines?: Record<string, { mount?: Mount; query?: string }>;
+}
+
 export interface Project {
   version: 1;
   name: string;
   parts: PartInstance[];
   wires: Wire[];
+  bom?: BomSettings;
   /** Firmware sources keyed by file name (assembled inside the app). */
   sources?: Record<string, string>;
   /** Imported part definitions used by this project, so it opens anywhere. */
@@ -68,7 +81,7 @@ class UnionFind {
 
 const key = (x: number, y: number) => `${x},${y}`;
 
-function onSegment(px: number, py: number, [ax, ay]: [number, number], [bx, by]: [number, number]): boolean {
+export function onSegment(px: number, py: number, [ax, ay]: [number, number], [bx, by]: [number, number]): boolean {
   if (ax === bx) return px === ax && py >= Math.min(ay, by) && py <= Math.max(ay, by);
   if (ay === by) return py === ay && px >= Math.min(ax, bx) && px <= Math.max(ax, bx);
   // diagonal segment: exact collinearity
@@ -85,7 +98,7 @@ export interface NetlistResult {
 }
 
 /**
- * Connectivity rules (as in Proteus ISIS): wire vertices connect; a wire end
+ * Connectivity rules: wire vertices connect; a wire end
  * or pin tip landing on another wire's segment makes a junction; power and
  * ground terminals and net labels join nets by name.
  */

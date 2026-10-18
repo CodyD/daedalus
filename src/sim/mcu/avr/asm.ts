@@ -1,5 +1,5 @@
 // Two-pass AVR assembler (avrasm-style syntax) so firmware can be written and
-// built inside the app, like Proteus's built-in source/assembler support.
+// built inside the app.
 //
 //   .equ NAME = expr      .def tmp = r16      .org wordaddr
 //   .db 1, 2, "text"      .dw 0x1234, label

@@ -1,5 +1,5 @@
 // Simulation runs off the UI thread. The worker paces simulated time against
-// wall-clock time (like Proteus's real-time mode) and streams indicator
+// wall-clock time (real-time mode) and streams indicator
 // state back at ~30 fps.
 
 import type { Netlist } from "../../shared/component";

@@ -422,6 +422,8 @@ svg .i-stop { fill: var(--i-stop); }
 :root[data-theme="high-contrast"] .statusbar { border-top: 1px solid var(--border); }
 :root[data-theme="high-contrast"] .tb-btn:hover:not(:disabled) { background: none; border-color: var(--accent); }
 .statusbar .mono { font-family: var(--mono); }
+.status-btn { background: none; border: 1px solid transparent; color: inherit; font: inherit; padding: 0 6px; cursor: pointer; }
+.status-btn:hover, .status-btn:focus-visible { background: rgba(255, 255, 255, 0.15); outline: none; border-color: rgba(255, 255, 255, 0.4); }
 
 /* --- buttons and fields --- */
 .btn {
@@ -602,6 +604,8 @@ svg .i-stop { fill: var(--i-stop); }
 
 .inspector { padding: 8px; display: flex; flex-direction: column; gap: 10px; }
 .inspector .title { font-size: 14px; font-weight: 600; }
+/* Properties window: a rule under each section, none after the last. */
+.inspector.props > :not(:last-child) { border-bottom: 1px dashed var(--grip); padding-bottom: 10px; }
 
 /* --- canvas --- */
 .canvas-wrap { position: relative; flex: 1; background: var(--sheet); min-width: 0; min-height: 0; }
@@ -793,3 +797,25 @@ svg .i-stop { fill: var(--i-stop); }
 .chat-phase { font-size: 11px; color: var(--text-muted); }
 .chat-options { display: flex; flex-direction: column; gap: 4px; }
 .btn.ready { animation: pulse 1.6s infinite; }
+
+/* --- parts list / consolidate --- */
+.bom-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bom-bar .spacer, .dialog .actions .spacer { flex: 1; }
+.seg { display: inline-flex; }
+.seg .btn + .btn { margin-left: -1px; }
+.bom-scroll { overflow: auto; max-height: calc(100vh - 260px); border: 1px solid var(--border); }
+.bom-table td { vertical-align: top; }
+.bom-table th { position: sticky; top: 0; background: var(--env); }
+.bom-refs { max-width: 180px; word-break: break-word; }
+.bom-q { display: flex; gap: 2px; min-width: 240px; }
+.bom-q input { flex: 1; min-width: 0; }
+.bom-dist { white-space: nowrap; }
+.inv-table input, .inv-table select { width: 100%; min-width: 0; }
+.inv-table td { vertical-align: middle; }
+.pair-phone { display: flex; flex-direction: column; gap: 12px; }
+.pair-phone h3 { margin: 0; font-size: 13px; font-weight: 600; }
+.pair-code { display: flex; gap: 16px; align-items: center; min-height: 120px; }
+.pair-code p { margin: 0 0 6px; }
+/* QR codes need a light quiet zone to scan, whatever the theme. */
+.pair-code img { background: #fff; padding: 8px; border-radius: 4px; }
+.pair-text { font-size: 18px; letter-spacing: 2px; user-select: all; }

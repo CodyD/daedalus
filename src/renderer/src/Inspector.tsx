@@ -21,13 +21,13 @@ interface Props {
 export function Inspector(p: Props) {
   const sel = p.selection;
   if (sel?.kind === "wire") {
-    return <div className="inspector" role="group" aria-label="Wire properties"><div className="title">Wire</div><div className="kv"><span>net</span><span>{p.wireNets.get(sel.id) ?? "?"}</span></div></div>;
+    return <div className="inspector props" role="group" aria-label="Wire properties"><div className="title">Wire</div><div className="kv"><span>net</span><span>{p.wireNets.get(sel.id) ?? "?"}</span></div></div>;
   }
   const part = sel?.kind === "part" ? p.project.parts.find((q) => q.ref === sel.ref) : undefined;
   const def = part ? p.defs.get(part.defId) : p.libraryPick ?? undefined;
   if (!def) {
     return (
-      <div className="inspector">
+      <div className="inspector props">
         <div className="title">{p.project.name}</div>
         <div className="desc">{p.project.parts.length} parts · {p.project.wires.length} wires</div>
         <div className="desc">Select a part to edit its properties, or pick one from the library to place it.</div>
@@ -35,7 +35,7 @@ export function Inspector(p: Props) {
     );
   }
   return (
-    <div className="inspector">
+    <div className="inspector props">
       <div>
         <div className="title">{part ? `${part.ref} · ` : ""}{def.name}</div>
         <div className="desc">{def.description}</div>

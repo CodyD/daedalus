@@ -10,20 +10,47 @@ import type { AssistantPhase } from "./assistant-prompt";
 import { claudeCodeVersion, findClaudeCode } from "./claude-code";
 import { ImportProgress, ImportRequest, estimateImport, importDatasheet, inspectPdf, loadPdf } from "./datasheet";
 import { importDatasheetViaClaudeCode } from "./datasheet-claude-code";
-import { partsDb } from "./parts-db";
+import { apiClient, type LinkedPhone } from "./api-client";
+import QRCode from "qrcode";
+import { Distributor, DistributorKeys, lookupStock } from "./distributors";
+import { profileStore, remoteProfileStore } from "./profiles";
+import { BUILTIN_LIBRARY } from "../shared/library";
+import { DEFAULT_PROFILE_ID, describeInventory } from "../shared/inventory";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const userDir = () => app.getPath("userData");
 const libDir = () => join(userDir(), "library");
 const settingsPath = () => join(userDir(), "settings.json");
 const partsCachePath = () => join(userDir(), "parts-cache.json");
+const localProfilesDir = () => join(userDir(), "profiles");
 
-// DATABASE_URL comes from the environment, the project's .env (dev), or a .env
-// in the user data folder (packaged builds; .env is never bundled into the app).
+// The daedalus-api Worker. DAEDALUS_API_URL overrides it from the environment,
+// the project's .env (dev, e.g. http://localhost:8787), or a .env in the user
+// data folder; set it empty to keep parts and profiles on this machine only.
+const DEFAULT_API_URL = "https://daedalus-api.cd-cloud.workers.dev";
 for (const p of [join(app.getAppPath(), ".env"), join(userDir(), ".env")]) {
   try { if (existsSync(p)) process.loadEnvFile(p); } catch { /* malformed .env */ }
 }
-const db = process.env.DATABASE_URL ? partsDb(process.env.DATABASE_URL) : null;
+const apiUrl = process.env.DAEDALUS_API_URL ?? DEFAULT_API_URL;
+const api = apiUrl ? apiClient(apiUrl, {
+  // The device token only grants access to this install's own data; without OS
+  // key storage (some Linux desktops) it is kept unencrypted rather than not at all.
+  load: async () => {
+    const s = await loadSettings();
+    return decrypt(s.deviceTokenEnc) ?? s.deviceToken;
+  },
+  save: async (token) => {
+    const s = await loadSettings();
+    if (safeStorage.isEncryptionAvailable()) s.deviceTokenEnc = safeStorage.encryptString(token).toString("base64");
+    else s.deviceToken = token;
+    await saveSettings(s);
+    await queueCachedImports();
+  },
+}) : null;
+const db = api?.parts ?? null;
+const profiles = api
+  ? remoteProfileStore(api, localProfilesDir(), join(userDir(), "profiles-cache.json"))
+  : profileStore(localProfilesDir());
 
 interface Settings {
   apiKeyEnc?: string;
@@ -36,6 +63,15 @@ interface Settings {
   recent?: string[];
   /** Main window placement from the last session. */
   window?: WindowState;
+  /** Distributor API credentials for stock checks, encrypted like apiKeyEnc. */
+  mouserKeyEnc?: string;
+  digikeyIdEnc?: string;
+  digikeySecretEnc?: string;
+  /** Profile whose inventory is in use; unset = the default profile. */
+  activeProfile?: string;
+  /** daedalus-api device token, encrypted like apiKeyEnc (deviceToken when OS key storage is unavailable). */
+  deviceTokenEnc?: string;
+  deviceToken?: string;
 }
 
 interface WindowState {
@@ -76,6 +112,19 @@ async function apiKey(): Promise<string | undefined> {
   return undefined; // SDK falls back to ANTHROPIC_API_KEY / ant profile
 }
 
+const decrypt = (v?: string) =>
+  v && safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(Buffer.from(v, "base64")) : undefined;
+
+/** Saved keys, else MOUSER_API_KEY / DIGIKEY_CLIENT_ID / DIGIKEY_CLIENT_SECRET. */
+async function distributorKeys(): Promise<DistributorKeys> {
+  const s = await loadSettings();
+  return {
+    mouser: decrypt(s.mouserKeyEnc) ?? process.env.MOUSER_API_KEY,
+    digikeyId: decrypt(s.digikeyIdEnc) ?? process.env.DIGIKEY_CLIENT_ID,
+    digikeySecret: decrypt(s.digikeySecretEnc) ?? process.env.DIGIKEY_CLIENT_SECRET,
+  };
+}
+
 async function provider(): Promise<Provider> {
   const s = await loadSettings();
   cachedClaudePath = s.claudePath;
@@ -108,10 +157,11 @@ function safeFileName(id: string): string {
 }
 
 // --- component library -------------------------------------------------------
-// With a database configured, parts live in Neon and the library folder is an
-// outbox: a save that cannot reach the database lands there and is uploaded on
-// the next successful listing (then moved to library/uploaded/). The last
-// listing is cached so the library still loads offline.
+// With daedalus-api configured, this install's imported parts live there and
+// the library folder is an outbox: a save that cannot reach the API lands there
+// and is uploaded on the next successful listing (then moved to
+// library/uploaded/). The last listing is cached so the library still loads
+// offline. Built-in parts ship with the app and are never uploaded.
 
 const partFile = (id: string) => join(libDir(), `${safeFileName(id)}.json`);
 
@@ -141,7 +191,21 @@ async function readPartsCache(): Promise<ComponentDef[]> {
   }
 }
 
+/**
+ * On first registration with the API: parts the old shared database listed
+ * (still in the listing cache) go into the outbox, so this install keeps the
+ * parts it had imported.
+ */
+async function queueCachedImports(): Promise<void> {
+  const builtin = new Set(BUILTIN_LIBRARY.map((d) => d.id));
+  for (const d of await readPartsCache()) {
+    if (d.source?.kind !== "builtin" && !builtin.has(d.id)) await saveLocalPart(d);
+  }
+}
+
 async function listLibrary(): Promise<ComponentDef[]> {
+  // Registers on first run (see queueCachedImports) before the outbox is read.
+  await api?.register().catch(() => { /* offline: handled below */ });
   const local = await listLocalParts();
   if (!db) return local;
   let remote: ComponentDef[];
@@ -158,7 +222,7 @@ async function listLibrary(): Promise<ComponentDef[]> {
     remote = await db.list();
     await writeFile(partsCachePath(), JSON.stringify(remote));
   } catch (e) {
-    console.warn(`Parts database unreachable, using the cached library: ${e}`);
+    console.warn(`Parts API unreachable, using the cached library: ${e}`);
     remote = await readPartsCache();
   }
   const byId = new Map(remote.map((d) => [d.id, d]));
@@ -173,7 +237,7 @@ async function savePart(def: ComponentDef): Promise<void> {
       await rm(partFile(def.id), { force: true });
       return;
     } catch (e) {
-      console.warn(`Parts database unreachable, saving ${def.id} locally until it is: ${e}`);
+      console.warn(`Parts API unreachable, saving ${def.id} locally until it is: ${e}`);
     }
   }
   await saveLocalPart(def);
@@ -185,9 +249,20 @@ async function deletePart(id: string): Promise<void> {
   try {
     await db.remove(id);
   } catch (e) {
-    console.warn(`Parts database unreachable, ${id} was not removed from it: ${e}`);
+    console.warn(`Parts API unreachable, ${id} was not removed from it: ${e}`);
   }
   await writeFile(partsCachePath(), JSON.stringify((await readPartsCache()).filter((d) => d.id !== id)));
+}
+
+// --- profiles and inventory ---------------------------------------------------
+
+async function activeProfileId(): Promise<string> {
+  return (await loadSettings()).activeProfile ?? DEFAULT_PROFILE_ID;
+}
+
+/** The active profile; falls back to the default one if its file is gone. */
+async function activeProfile() {
+  return profiles.get(await activeProfileId());
 }
 
 let importAbort: AbortController | null = null;
@@ -207,6 +282,45 @@ function registerIpc(win: BrowserWindow): void {
   });
 
   ipcMain.handle("lib:reveal", () => shell.openPath(libDir()));
+
+  ipcMain.handle("profile:list", async () => ({ active: (await activeProfile()).id, profiles: await profiles.list() }));
+  ipcMain.handle("profile:active", () => activeProfile());
+  ipcMain.handle("profile:switch", async (_e, id: string) => {
+    const p = await profiles.get(id);
+    await saveSettings({ ...(await loadSettings()), activeProfile: p.id });
+    return p;
+  });
+  ipcMain.handle("profile:create", async (_e, name: string) => {
+    const p = await profiles.create(String(name));
+    await saveSettings({ ...(await loadSettings()), activeProfile: p.id });
+    return p;
+  });
+  ipcMain.handle("profile:rename", async (_e, id: string, name: string) => { await profiles.rename(id, String(name)); return true; });
+  ipcMain.handle("profile:delete", async (_e, id: string) => {
+    await profiles.remove(id);
+    const s = await loadSettings();
+    if (s.activeProfile === id) { delete s.activeProfile; await saveSettings(s); }
+    return true;
+  });
+  ipcMain.handle("inventory:set", async (_e, items: unknown) => {
+    await profiles.setInventory(await activeProfileId(), items);
+    return true;
+  });
+
+  // --- phone pairing (daedalus-inventory-scanner) ---------------------------
+  const pairingApi = () => {
+    if (!api) throw new Error("Pairing a phone needs the Daedalus API, but DAEDALUS_API_URL is set empty.");
+    return api;
+  };
+  ipcMain.handle("pair:start", async () => {
+    const { code, expiresAt } = await pairingApi().pairing.code();
+    // The scanner app reads the API address from the QR too, so a dev API works.
+    const link = `daedalus://pair?api=${encodeURIComponent(apiUrl)}&code=${code}`;
+    const qrSvg = await QRCode.toString(link, { type: "svg", margin: 1, errorCorrectionLevel: "M" });
+    return { code, expiresAt, qrSvg };
+  });
+  ipcMain.handle("pair:list", (): Promise<LinkedPhone[]> => pairingApi().pairing.linked());
+  ipcMain.handle("pair:revoke", async (_e, id: string) => { await pairingApi().pairing.revoke(String(id)); return true; });
 
   // Returns "" on success, else an error message (e.g. the PDF was moved).
   ipcMain.handle("datasheet:open", (_e, path: string) =>
@@ -260,6 +374,17 @@ function registerIpc(win: BrowserWindow): void {
     await writeFile(target, text);
     await rememberProject(target);
     return target;
+  });
+
+  ipcMain.handle("file:saveText", async (_e, text: string, name: string, filter: { name: string; extensions: string[] }) => {
+    const { lastDir } = await loadSettings();
+    const r = await dialog.showSaveDialog(win, {
+      defaultPath: lastDir && existsSync(lastDir) ? join(lastDir, name) : name,
+      filters: [filter],
+    });
+    if (r.canceled || !r.filePath) return null;
+    await writeFile(r.filePath, text);
+    return r.filePath;
   });
 
   ipcMain.handle("file:pick", async (_e, kind: "hex" | "asm") => {
@@ -327,6 +452,11 @@ function registerIpc(win: BrowserWindow): void {
     estimateImport: runEstimate,
     downloadsDir: () => join(userDir(), "datasheets"),
     saveComponent: savePart,
+    inventory: async () => {
+      const defs = new Map(BUILTIN_LIBRARY.map((d) => [d.id, d] as const));
+      for (const d of await listLibrary()) defs.set(d.id, d);
+      return describeInventory(await activeProfile(), defs);
+    },
   });
   ipcMain.handle("assistant:send", (_e, text: string, phase: AssistantPhase) => {
     if (assistant.busy) return false;
@@ -353,7 +483,9 @@ function registerIpc(win: BrowserWindow): void {
     const s = await loadSettings();
     cachedClaudePath = s.claudePath;
     const path = findClaudeCode(s.claudePath);
+    const dk = await distributorKeys();
     return {
+      distributors: { mouser: !!dk.mouser, digikey: !!dk.digikeyId && !!dk.digikeySecret },
       keySource: s.apiKeyEnc ? "settings" : process.env.ANTHROPIC_API_KEY ? "env" : "sdk-default",
       encryption: safeStorage.isEncryptionAvailable(),
       provider: await provider(),
@@ -373,6 +505,23 @@ function registerIpc(win: BrowserWindow): void {
     }
     await mkdir(userDir(), { recursive: true });
     await writeFile(settingsPath(), JSON.stringify(s, null, 2));
+    return true;
+  });
+
+  ipcMain.handle("bom:stock", async (_e, dist: Distributor, query: string) => lookupStock(dist, query, await distributorKeys()));
+
+  /** Each field: a string saves it, null removes it, undefined leaves it alone. */
+  ipcMain.handle("settings:setDistributorKeys", async (_e, k: { mouser?: string | null; digikeyId?: string | null; digikeySecret?: string | null }) => {
+    const s = await loadSettings();
+    const fields = { mouser: "mouserKeyEnc", digikeyId: "digikeyIdEnc", digikeySecret: "digikeySecretEnc" } as const;
+    for (const [from, to] of Object.entries(fields) as [keyof typeof fields, (typeof fields)[keyof typeof fields]][]) {
+      const v = k[from];
+      if (v === undefined) continue;
+      if (!v) { delete s[to]; continue; }
+      if (!safeStorage.isEncryptionAvailable()) throw new Error("OS key storage is unavailable; use the MOUSER_API_KEY / DIGIKEY_CLIENT_ID / DIGIKEY_CLIENT_SECRET environment variables instead.");
+      s[to] = safeStorage.encryptString(v).toString("base64");
+    }
+    await saveSettings(s);
     return true;
   });
 

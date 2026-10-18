@@ -1,10 +1,9 @@
 // Component library format.
 //
 // One schema describes every part: built-in passives, logic chips, MCUs,
-// peripherals, and parts imported from a datasheet by Claude. It plays the
-// same role as a Proteus library part: a symbol, a pin list, editable
-// properties, and a reference to a simulation model (Proteus uses the
-// PRIMITIVE / MODFILE / MODDLL properties for that last part; we use `model`).
+// peripherals, and parts imported from a datasheet by Claude. Each part has a
+// symbol, a pin list, editable properties, and a reference to a simulation
+// model (`model`).
 
 import { z } from "zod";
 
@@ -183,6 +182,7 @@ export const ComponentDef = z.object({
   symbol: SymbolDef,
   model: ModelDef,
   electrical: ElectricalChars.optional(),
+  footprint: z.string().optional().describe("KiCad footprint for the package, as 'Library:Footprint' from the standard KiCad libraries, e.g. 'Package_DIP:DIP-8_W7.62mm' or 'Package_SO:SOIC-8_3.9x4.9mm_P1.27mm'. Pads are the pin numbers."),
   source: z.object({
     kind: z.enum(["builtin", "datasheet", "emulated"]),
     file: z.string().optional(),

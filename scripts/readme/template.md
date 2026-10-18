@@ -1,7 +1,7 @@
 <!-- template: Source for README.md. Run `npm run readme` to retake the screenshots in docs/images/ and rebuild README.md. {{tests}}, {{examples}}, {{parts}} and {{version}} are filled from the repo. Screenshot scenes live in scripts/readme/capture.cjs. Comments starting with "template:" are dropped from the output. -->
 # Daedalus
 
-A desktop circuit simulator in the style of Proteus VSM: schematic capture, mixed-mode SPICE plus event-driven digital simulation, instruction-level microcontroller co-simulation, interactive peripherals, and **AI datasheet import**. You give it a component's PDF datasheet and Claude turns it into a part you can simulate.
+A desktop circuit simulator: schematic capture, mixed-mode SPICE plus event-driven digital simulation, instruction-level microcontroller co-simulation, interactive peripherals, and **AI datasheet import**. You give it a component's PDF datasheet and Claude turns it into a part you can simulate.
 
 ![Daedalus running the HD44780 LCD example: an ATmega328P writes "Hello, Daedalus!" and a live counter to a 16x2 LCD while the CPU Registers window shows the program counter, cycle count and registers](docs/images/hero.png)
 
@@ -75,9 +75,9 @@ npx vite --config vite.renderer.config.ts   # renderer only, in a browser (no fi
 
 Open **File → Examples…** to load one of the bundled circuits, then press **Start** (F12).
 
-### Parts database (optional)
+### Parts and inventory service
 
-Put `DATABASE_URL=<Neon connection string>` in `.env` (gitignored), then run `npm run db:seed` to create the `parts` table (`db/schema.sql`) and upsert the built-in parts. With `DATABASE_URL` set, the app lists, saves and deletes library parts in Neon. Datasheet PDFs stay on disk. If the database can't be reached, saves are kept in the local library folder and uploaded on the next listing that connects, and the last listing is cached so the library still loads offline. Packaged builds read `.env` from the user data folder instead; never ship the owner connection string in a build you share.
+The app talks to the [daedalus-api](../daedalus-api) Worker at `https://daedalus-api.cd-cloud.workers.dev`. Set `DAEDALUS_API_URL` in `.env` (gitignored) to use another one (`http://localhost:8787` for `npm run dev` there), or set it empty to keep everything on this machine. The app keeps this install's imported parts and its profiles' inventory there; built-in parts always ship with the app. On first connection the app registers as an anonymous device: the API issues a random token, stored encrypted in `settings.json`, and keeps only its hash. Nothing about the machine or user is sent. Existing local profiles are uploaded once (the folder is then renamed `profiles-uploaded-*`). Datasheet PDFs stay on disk. If the API can't be reached, part saves are kept in the local library folder and uploaded on the next listing that connects, and the last listing and profiles read are cached so the library and inventory still load offline. Packaged builds read `.env` from the user data folder.
 
 ## Examples
 
@@ -97,37 +97,17 @@ Anything else comes in through datasheet import or the AI assistant.
 
 ---
 
-## How Proteus simulation works (evidence)
+## How the simulator works
 
-Proteus VSM ("Virtual System Modelling") is closed source. These are the public sources this design is based on, with what each one shows.
-
-**1. Mixed-mode SPICE, with firmware co-simulated against it.** Labcenter's product page ([labcenter.com/simulation](https://www.labcenter.com/simulation)):
-> "Proteus VSM blends mixed-mode SPICE simulation with world leading fast microcontroller simulation."
-> "...co-simulate the program within a mixed-mode SPICE circuit simulation, including MCU peripherals."
-> "The VSM CPU models fully simulate I/O ports, interrupts, timers, USARTs"
-
-**2. The kernels: SPICE3F5 analogue plus an event-driven digital simulator.** A Proteus 7 product description (secondary source, so treat it as corroborating only) says the simulator is "a SPICE3f5 analogue simulator kernel combined with an event-driven digital simulator" ([source](https://dcmpx.remotevs.com/com/informer/proteus/SL)).
-
-**3. Models are plug-ins with separate digital, analogue and graphical interfaces.** The VSM SDK headers (`vsm.hpp`) ship in the Proteus `INCLUDE` folder. Public model sources show the structure:
-- [MockbaTheBorg/VSMModel `DsimModel.h`](https://github.com/MockbaTheBorg/VSMModel/blob/master/DsimModel.h): a digital model implements `IDSIMMODEL` with `setup(IINSTANCE*, IDSIMCKT*)`, `simulate(ABSTIME, DSIMMODES)`, `callback(ABSTIME, EVENTID)`, plus `actuate()` and `indicate()` for UI interaction.
-- [`DsimModel.cpp`](https://github.com/MockbaTheBorg/VSMModel/blob/master/DsimModel.cpp): pins come from `inst->getdsimpin("A", true)`. Outputs are scheduled as timed events, `pin_Q->setstate(time, 1, SHI)`, using strength states such as `SHI`/`SLO`.
-- [`ActiveModel.h`](https://github.com/MockbaTheBorg/VSMModel/blob/master/ActiveModel.h): the graphical side (`IACTIVEMODEL`) hands the simulator its `getspicemodel()` and `getdsimmodel()` and handles `animate()` and `actuate()`. This is how LEDs light and buttons get clicked.
-- [VSMZ80 `DsimModel.cpp`](https://github.com/MockbaTheBorg/VSMZ80/blob/master/DsimModel.cpp) is a Z80 CPU written as a VSM digital model. It registers a clock-edge handler (`pin_CLK->sethandler(this, &DsimModel::clockstep)`) and drives bus pins with timestamped `setstate(time + delay, ...)` calls. So a CPU model is an event-driven digital model that executes instructions.
-- An EDABoard thread notes that mixed models inherit both `IDSIMMODEL` and `ISPICEMODEL` ([edaboard](https://www.edaboard.com/threads/creating-a-new-component-dll-for-proteus-vsm.188054/)).
-
-**4. Library parts point at their models through properties.** Firmware is a part property: "all you need to do is specify the program file and clock frequencies as properties of the microcontroller part" ([labcenter.com/compilers](https://www.labcenter.com/compilers/)). A forum example of a part's property text shows `{PRIMITIVE=DIGITAL,LEDMPX}` and `{MODDLL=LEDMPX}` ([edaboard](https://edaboard.com/threads/modifying-a-component-in-proteus.256849)). That is anecdotal, not official documentation.
-
-### How Daedalus maps onto that
-
-| Proteus VSM | Daedalus | Where |
+| Piece | Implementation | Where |
 |---|---|---|
-| SPICE3F5 analogue kernel | MNA + Newton-Raphson, backward-Euler transient, SPICE `pnjlim` limiting, adaptive timestep | `src/sim/analog/mna.ts`, `elements.ts` |
-| SPICE primitives / MODFILE | SPICE netlist subset: R C L V I D Q M E G S + behavioural `OPAMP`, `.model` cards | `src/sim/analog/spice.ts` |
-| Event-driven digital simulator, `SHI/SLO/WHI...` states | Timed event queue, strength-resolved nets (strong/weak/Z, conflicts give X) | `src/sim/events.ts`, `logic.ts`, `engine.ts` |
+| Analogue kernel | MNA + Newton-Raphson, backward-Euler transient, SPICE `pnjlim` limiting, adaptive timestep | `src/sim/analog/mna.ts`, `elements.ts` |
+| SPICE primitives | SPICE netlist subset: R C L V I D Q M E G S + behavioural `OPAMP`, `.model` cards | `src/sim/analog/spice.ts` |
+| Event-driven digital simulator | Timed event queue, strength-resolved nets (strong/weak/Z, conflicts give X) | `src/sim/events.ts`, `logic.ts`, `engine.ts` |
 | Digital/analogue interface | Digital outputs on analogue nets become Norton sources (VOH/VOL behind Rout). Digital inputs read node voltages through VIL/VIH thresholds with hysteresis | `engine.ts` (`attachMixedPins`, `sampleThresholds`) |
-| `IDSIMMODEL` / `ISPICEMODEL` / `IACTIVEMODEL` | `SimModel`: `setup`, `advance`, `afterAnalogStep`, `indicate`, `actuate` | `src/sim/engine.ts` |
-| `PRIMITIVE` / `MODDLL` / `MODFILE` | `model.kind`: `spice` / `logic` / `mixed` / `builtin` / `mcu` | `src/shared/component.ts` |
-| CPU models (PROGRAM + CLOCK properties) | AVR8 instruction-set simulator with GPIO, timers 0/1/2 (normal/CTC/fast PWM/phase-correct), USART, ADC, INT0/1, PCINT, EEPROM | `src/sim/mcu/avr/` |
+| Model interface | `SimModel`: `setup`, `advance`, `afterAnalogStep`, `indicate`, `actuate` | `src/sim/engine.ts` |
+| Model kinds | `model.kind`: `spice` / `logic` / `mixed` / `builtin` / `mcu` | `src/shared/component.ts` |
+| CPU models | AVR8 instruction-set simulator with GPIO, timers 0/1/2 (normal/CTC/fast PWM/phase-correct), USART, ADC, INT0/1, PCINT, EEPROM | `src/sim/mcu/avr/` |
 | Animated parts (LED, LCD, switches) | Built-in interactive models plus SVG indicators | `src/sim/models/builtins.ts`, `src/renderer/src/PartView.tsx` |
 | Virtual instruments | Virtual terminal (pin-level UART), oscilloscope, logic probe, volt/ammeter | same |
 | Real-time simulation | Worker paces simulated time against wall clock and shows % real time when it can't keep up | `src/renderer/src/sim.worker.ts` |
@@ -199,7 +179,7 @@ Click **AI Assistant** in the toolbar. You describe what you want to build in th
    - If no PDF link turns up, it asks you to pick a local file instead.
    - Either way, it runs the same import pipeline as the datasheet dialog.
 3. **Wiring.** It places parts and auto-arranges them without overlap. It joins pins into named nets with `connect`.
-   - Each pin gets a short stub ending in a net label. Labels with the same name are connected, the way people wire busy Proteus sheets, so there's no wire routing for the model to get wrong.
+   - Each pin gets a short stub ending in a net label. Labels with the same name are connected, the way people wire busy schematic sheets, so there's no wire routing for the model to get wrong.
    - `GND` becomes ground symbols, and supply nets become power rails.
 4. **Firmware.** For AVR parts it writes assembly with `write_firmware`. Assembler errors come back with the line number and source text.
 5. **Verification.** `run_simulation` runs the circuit headless in a worker. It can script button presses, pot moves and terminal input. It reports LEDs, LCD text, terminal output, 7-segment digits, scope min/max/frequency, watched nets and warnings, and the assistant fixes the design until the result matches what you asked for.

@@ -1,6 +1,6 @@
 // Mixed-mode co-simulation kernel.
 //
-// Three engines share one timeline, the same split Proteus VSM uses (a SPICE
+// Three engines share one timeline (a SPICE
 // analogue kernel plus an event-driven digital simulator, with CPU models
 // executing firmware against both):
 //

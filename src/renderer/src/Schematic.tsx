@@ -6,7 +6,7 @@ import { formatValue } from "../../sim/units";
 import type { Frame } from "./sim.worker";
 import { PartView, valueLabel } from "./PartView";
 import { announce } from "./a11y";
-import { isTerminal } from "../../shared/edit";
+import { isTerminal, transformPart } from "../../shared/edit";
 import { Pt, hopPath, lRoute, manhattanTree, segmentsOf } from "./wiring";
 
 export type Selection = { kind: "part"; ref: string } | { kind: "wire"; id: string } | null;
@@ -60,7 +60,9 @@ export function Schematic(p: Props) {
   const [view, setView] = useState({ x: -400, y: -300, scale: 1.2 });
   const [cursor, setCursor] = useState<[number, number]>([0, 0]);
   const [drawing, setDrawing] = useState<[number, number][] | null>(null);
-  const [drag, setDrag] = useState<{ id: number; ref: string; dx: number; dy: number; moved: boolean } | null>(null);
+  // `base` is the sheet as it was when the drag began: each step re-applies the
+  // whole move to it, so rerouted wires never pile up corners along the way.
+  const [drag, setDrag] = useState<{ id: number; ref: string; dx: number; dy: number; moved: boolean; base: Project } | null>(null);
   const [pan, setPan] = useState<{ sx: number; sy: number; vx: number; vy: number } | null>(null);
   const [hover, setHover] = useState<string | null>(null);
   const [hoverTerm, setHoverTerm] = useState<string | null>(null);
@@ -301,13 +303,7 @@ export function Schematic(p: Props) {
       const nx = snap(wx - drag.dx), ny = snap(wy - drag.dy);
       const at = p.project.parts.find((q) => q.ref === drag.ref);
       // Only real moves become edits, so a plain click doesn't add an undo step.
-      if (at && (at.x !== nx || at.y !== ny)) p.onChange((proj) => ({
-        ...proj,
-        parts: proj.parts.map((q) => {
-          if (q.ref !== drag.ref || (q.x === nx && q.y === ny)) return q;
-          return { ...q, x: nx, y: ny };
-        }),
-      }), `drag:${drag.id}`);
+      if (at && (at.x !== nx || at.y !== ny)) p.onChange(() => transformPart(drag.base, p.defs, drag.ref, { x: nx, y: ny }), `drag:${drag.id}`);
       if (!drag.moved) setDrag({ ...drag, moved: true });
     }
     if (simulating) {
@@ -346,13 +342,14 @@ export function Schematic(p: Props) {
         } else if (p.selection?.kind === "part" && !simulating) {
           const ref = p.selection.ref;
           const at = p.project.parts.find((q) => q.ref === ref);
-          p.onChange((proj) => ({ ...proj, parts: proj.parts.map((q) => (q.ref === ref ? { ...q, rot: ((q.rot + 90) % 360) as Rotation } : q)) }));
+          if (at) p.onChange((proj) => transformPart(proj, p.defs, ref, { rot: ((at.rot + 90) % 360) as Rotation }));
           if (at) announce(`${ref} rotated to ${(at.rot + 90) % 360} degrees`);
         }
       }
       if ((e.key === "m" || e.key === "M") && p.selection?.kind === "part" && !simulating) {
         const ref = p.selection.ref;
-        p.onChange((proj) => ({ ...proj, parts: proj.parts.map((q) => (q.ref === ref ? { ...q, mirror: !q.mirror } : q)) }));
+        const at = p.project.parts.find((q) => q.ref === ref);
+        if (at) p.onChange((proj) => transformPart(proj, p.defs, ref, { mirror: !at.mirror }));
         announce(`${ref} mirrored`);
       }
       if ((e.key === "Delete" || e.key === "Backspace") && p.selection && !simulating) {
@@ -428,6 +425,7 @@ export function Schematic(p: Props) {
   };
   const selPart = p.selection?.kind === "part" ? p.project.parts.find((q) => q.ref === (p.selection as { ref: string }).ref) : undefined;
   const pressed = useRef<string | null>(null);
+  const kbMove = useRef<{ ref: string; base: Project; out?: Project } | null>(null);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.ctrlKey || e.altKey || e.metaKey) return;
@@ -484,7 +482,11 @@ export function Schematic(p: Props) {
       if (selPart && !simulating) {
         const ref = selPart.ref;
         const nx = selPart.x + arrow[0] * GRID * stepN, ny = selPart.y + arrow[1] * GRID * stepN;
-        p.onChange((proj) => ({ ...proj, parts: proj.parts.map((q) => (q.ref === ref ? { ...q, x: nx, y: ny } : q)) }), `kbmove:${ref}`);
+        // A run of presses is one move from where the run began, like a drag.
+        let km = kbMove.current;
+        if (!km || km.ref !== ref || km.out !== p.project) km = kbMove.current = { ref, base: p.project };
+        const run = km;
+        p.onChange(() => (run.out = transformPart(run.base, p.defs, ref, { x: nx, y: ny })), `kbmove:${ref}`);
         reveal(nx, ny);
         announce(`${ref} at ${Math.round(nx / GRID)}, ${Math.round(ny / GRID)}`);
       } else {
@@ -673,7 +675,7 @@ export function Schematic(p: Props) {
                 e.stopPropagation();
                 p.setSelection({ kind: "part", ref: part.ref });
                 if (!simulating) {
-                  setDrag({ id: Date.now(), ref: part.ref, dx: wx - part.x, dy: wy - part.y, moved: false });
+                  setDrag({ id: Date.now(), ref: part.ref, dx: wx - part.x, dy: wy - part.y, moved: false, base: p.project });
                   (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
                 }
               }}

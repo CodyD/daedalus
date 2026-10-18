@@ -16,6 +16,7 @@ export type ChatItem =
   | { kind: "done"; cost: number; subscription?: boolean };
 
 const TOOL_LABEL: Record<string, string> = {
+  get_inventory: "Checked inventory",
   search_library: "Searched library",
   get_part: "Read part",
   get_schematic: "Read schematic",

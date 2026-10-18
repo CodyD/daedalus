@@ -1,5 +1,4 @@
-// Model factory: maps a component's `model` description to a simulation model,
-// the way Proteus resolves PRIMITIVE / MODFILE / MODDLL on a library part.
+// Model factory: maps a component's `model` description to a simulation model.
 
 import type { NetlistInstance } from "../../shared/component";
 import { parseSpice, substituteProps } from "../analog/spice";

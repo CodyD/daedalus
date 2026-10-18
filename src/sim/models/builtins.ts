@@ -1,5 +1,5 @@
-// Built-in interactive and instrument models (the parts Proteus implements in
-// native "MODDLL" models rather than in SPICE): power rails, LEDs, switches,
+// Built-in interactive and instrument models (parts implemented natively
+// rather than in SPICE): power rails, LEDs, switches,
 // pots, logic sources/probes, clock generator, virtual terminal, HD44780 LCD,
 // seven-segment display, voltmeter, ammeter and a 4-channel oscilloscope.
 

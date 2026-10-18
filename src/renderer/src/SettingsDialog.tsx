@@ -40,15 +40,19 @@ interface Props {
   a11y: A11yOptions;
   onA11y: (o: A11yOptions) => void;
   onClose: () => void;
+  initialPage?: Page;
 }
 
-type Page = "environment" | "a11y" | "windows" | "schematic" | "ai";
+type Page = "environment" | "a11y" | "windows" | "schematic" | "ai" | "distributors";
 const PAGES: [Page, string][] = [
   ["environment", "General"], ["a11y", "Accessibility"], ["windows", "Tool Windows"], ["schematic", "Schematic"], ["ai", "AI Provider"],
+  ["distributors", "Distributors"],
 ];
 
-export function SettingsDialog({ view, onView, theme, onTheme, layout, onLayout, a11y, onA11y, onClose }: Props) {
-  const [page, setPage] = useState<Page>("environment");
+export type OptionsPage = Page;
+
+export function SettingsDialog({ view, onView, theme, onTheme, layout, onLayout, a11y, onA11y, onClose, initialPage = "environment" }: Props) {
+  const [page, setPage] = useState<Page>(initialPage);
   const uid = useId();
   const f = (name: string) => `${uid}-${name}`;
   const [info, setInfo] = useState<AppSettings | null>(null);
@@ -210,6 +214,8 @@ export function SettingsDialog({ view, onView, theme, onTheme, layout, onLayout,
               </div>
               <div className="desc" role="status">{msg}</div>
             </>}
+
+            {page === "distributors" && <DistributorKeys info={info} onSaved={refresh} />}
           </div>
         </div>
         <div className="actions">
@@ -217,4 +223,60 @@ export function SettingsDialog({ view, onView, theme, onTheme, layout, onLayout,
         </div>
     </Dialog>
   );
+}
+
+/** Credentials for the parts list's stock check. Saved encrypted, like the Anthropic key. */
+function DistributorKeys({ info, onSaved }: { info: AppSettings | null; onSaved: () => void }) {
+  const uid = useId();
+  const f = (name: string) => `${uid}-${name}`;
+  const [mouser, setMouser] = useState("");
+  const [dkId, setDkId] = useState("");
+  const [dkSecret, setDkSecret] = useState("");
+  const [msg, setMsg] = useState<string | null>(null);
+  const save = async (keys: Parameters<ReturnType<typeof api>["setDistributorKeys"]>[0], done: string) => {
+    try {
+      await api().setDistributorKeys(keys);
+      setMsg(done);
+      onSaved();
+    } catch (e) {
+      setMsg(String(e));
+    }
+  };
+  const state = (on?: boolean) => (on ? "configured" : "not configured");
+  return <>
+    <div className="desc">
+      The parts list always links to Mouser and DigiKey searches. With API credentials it can also check stock and price.
+      Both are free; keys are stored encrypted with the OS key store.
+    </div>
+    <div className="field">
+      <label htmlFor={f("mouser")}>Mouser Search API key</label>
+      <div className="desc" id={f("mouser-d")}>Current: {state(info?.distributors.mouser)}. Request one at mouser.com under My Account, APIs (or set MOUSER_API_KEY).</div>
+      <div className="row">
+        <input id={f("mouser")} aria-describedby={f("mouser-d")} type="password" autoComplete="off" value={mouser} onChange={(e) => setMouser(e.target.value)} />
+        <button className="btn" disabled={!mouser.trim()} onClick={() => save({ mouser: mouser.trim() }, "Mouser key saved.").then(() => setMouser(""))}>Save</button>
+        {info?.distributors.mouser && <button className="btn danger" onClick={() => save({ mouser: null }, "Mouser key removed.")}>Remove</button>}
+      </div>
+    </div>
+    <fieldset>
+      <legend>DigiKey Product Information API v4</legend>
+      <div className="desc" id={f("dk-d")}>
+        Current: {state(info?.distributors.digikey)}. Create a production app at developer.digikey.com with the Product Information API
+        and copy its client ID and secret (or set DIGIKEY_CLIENT_ID and DIGIKEY_CLIENT_SECRET).
+      </div>
+      <div className="field">
+        <label htmlFor={f("dkid")}>Client ID</label>
+        <input id={f("dkid")} aria-describedby={f("dk-d")} autoComplete="off" value={dkId} onChange={(e) => setDkId(e.target.value)} />
+      </div>
+      <div className="field">
+        <label htmlFor={f("dksec")}>Client secret</label>
+        <input id={f("dksec")} type="password" autoComplete="off" value={dkSecret} onChange={(e) => setDkSecret(e.target.value)} />
+      </div>
+      <div className="row" style={{ marginTop: 6 }}>
+        <button className="btn" disabled={!dkId.trim() || !dkSecret.trim()}
+          onClick={() => save({ digikeyId: dkId.trim(), digikeySecret: dkSecret.trim() }, "DigiKey credentials saved.").then(() => { setDkId(""); setDkSecret(""); })}>Save</button>
+        {info?.distributors.digikey && <button className="btn danger" onClick={() => save({ digikeyId: null, digikeySecret: null }, "DigiKey credentials removed.")}>Remove</button>}
+      </div>
+    </fieldset>
+    <div className="desc" role="status">{msg}</div>
+  </>;
 }

@@ -102,6 +102,7 @@ describe.skipIf(!LIVE)("live Claude Code", () => {
       saveComponent: async () => {},
       importDatasheet: async () => { throw new Error("not used"); },
       estimateImport: async () => ({ costUsd: 0, pages: 0, subscription: true }),
+      inventory: async () => ({ summary: "0 parts on hand", items: [] }),
     });
     await assistant.send(
       "Go ahead without asking: build an ATmega328P circuit where PB5 drives a red LED through a 330 ohm resistor to ground, " +

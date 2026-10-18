@@ -18,11 +18,16 @@ import { Icon, Menu, MenuBar } from "./MenuBar";
 import { ThemeSetting, applyTheme, loadTheme, saveTheme } from "./theme";
 import { resolveFiles } from "./firmware";
 import { ImportDialog } from "./ImportDialog";
+import { BomDialog } from "./BomDialog";
+import { KicadDialog } from "./KicadDialog";
+import { ConsolidateDialog } from "./ConsolidateDialog";
+import { InventoryDialog } from "./InventoryDialog";
+import type { Profile } from "../../shared/inventory";
 import { Inspector } from "./Inspector";
 import { PartBrowser } from "./PartBrowser";
 import { Mode, Schematic, Selection } from "./Schematic";
 import { AssistantPhase, BUILD_REQUEST } from "../../main/assistant-prompt";
-import { SettingsDialog, ViewOptions, loadViewOptions, saveViewOptions } from "./SettingsDialog";
+import { OptionsPage, SettingsDialog, ViewOptions, loadViewOptions, saveViewOptions } from "./SettingsDialog";
 import type { Frame, FromWorker, ToWorker } from "./sim.worker";
 
 type SimState = "stopped" | "running" | "paused";
@@ -43,7 +48,11 @@ export function App() {
   const [frame, setFrame] = useState<Frame | null>(null);
   const [logs, setLogs] = useState<LogLine[]>([]);
   const [speed, setSpeed] = useState(1);
-  const [dialog, setDialog] = useState<"import" | "settings" | "examples" | null>(null);
+  const [dialog, setDialog] = useState<"import" | "settings" | "examples" | "bom" | "consolidate" | "inventory" | "kicad" | null>(null);
+  /** Dialog to return to when the current one closes (Parts List -> Consolidate / Options). */
+  const [dialogBack, setDialogBack] = useState<"bom" | "kicad" | null>(null);
+  const [optionsPage, setOptionsPage] = useState<OptionsPage | undefined>();
+  const closeDialog = () => { setDialog(dialogBack); setDialogBack(null); setOptionsPage(undefined); };
   const [examples, setExamples] = useState<{ file: string; project: Project }[]>([]);
   const workerRef = useRef<Worker | null>(null);
   const [layout, setLayout] = useState<Layout>(loadLayout);
@@ -66,6 +75,9 @@ export function App() {
   const warnedRef = useRef(false);
 
   useEffect(() => { api().listLibrary().then(setUserParts); }, []);
+  /** Active user profile; its inventory feeds the parts list and the AI assistant. */
+  const [profile, setProfile] = useState<Profile | null>(null);
+  useEffect(() => { api().activeProfile().then(setProfile).catch(() => {}); }, []);
 
   const defs = useMemo(() => {
     const m = new Map<string, ComponentDef>();
@@ -451,6 +463,8 @@ export function App() {
         { sep: true },
         { label: "Save", shortcut: "Ctrl+S", onClick: () => save() },
         { label: "Save As…", shortcut: "Ctrl+Shift+S", onClick: () => save(true) },
+        { sep: true },
+        { label: "Export to KiCad PCB…", onClick: () => setDialog("kicad"), title: "Netlist with footprints for KiCad's PCB Editor" },
       ],
     },
     {
@@ -495,6 +509,10 @@ export function App() {
       items: [
         { label: "Import Datasheet…", onClick: () => setDialog("import"), disabled: simulating },
         { label: "AI Assistant", onClick: () => showPanel("assistant") },
+        { sep: true },
+        { label: "Parts List…", onClick: () => setDialog("bom"), title: "Bill of materials with Mouser and DigiKey links" },
+        { label: "Parts Inventory…", onClick: () => setDialog("inventory"), title: "Parts you already own; the AI assistant uses them where they fit" },
+        { label: "Consolidate…", onClick: () => setDialog("consolidate"), disabled: simulating, title: "Combine basic parts into resistor arrays, dual diodes and other multi-unit packages" },
         { sep: true },
         { label: "Options…", onClick: () => setDialog("settings") },
       ],
@@ -586,6 +604,11 @@ export function App() {
         <span>{simState === "stopped" ? "Ready" : simState === "paused" ? "Paused" : "Running"}</span>
         {frame?.failed && <span>Simulation failed</span>}
         <div className="spacer" />
+        {profile && (
+          <button className="status-btn" onClick={() => setDialog("inventory")} title="Open the parts inventory for this profile">
+            Profile: {profile.name} ({profile.inventory.length} parts)
+          </button>
+        )}
         {simState === "running" && <span>{slow ? `${Math.round((frame!.rate / speed) * 100)}% real time` : "Real time"}</span>}
         {simState !== "stopped" && <span className="mono">{timeStr}</span>}
         <span>Speed {speed}×</span>
@@ -613,8 +636,30 @@ export function App() {
           onLayout={setLayout}
           a11y={a11y}
           onA11y={setA11y}
-          onClose={() => setDialog(null)}
+          initialPage={optionsPage}
+          onClose={closeDialog}
         />
+      )}
+      {dialog === "bom" && (
+        <BomDialog
+          project={project}
+          defs={defs}
+          onChange={change}
+          inventory={profile?.inventory ?? []}
+          onInventory={() => { setDialogBack("bom"); setDialog("inventory"); }}
+          onConsolidate={() => { setDialogBack("bom"); setDialog("consolidate"); }}
+          onDistributorOptions={() => { setDialogBack("bom"); setOptionsPage("distributors"); setDialog("settings"); }}
+          onClose={closeDialog}
+        />
+      )}
+      {dialog === "kicad" && (
+        <KicadDialog project={project} defs={defs} onPartsList={() => { setDialogBack("kicad"); setDialog("bom"); }} onClose={closeDialog} />
+      )}
+      {dialog === "inventory" && (
+        <InventoryDialog project={project} defs={defs} onProfile={setProfile} onClose={closeDialog} />
+      )}
+      {dialog === "consolidate" && (
+        <ConsolidateDialog project={project} defs={defs} onChange={(fn) => { change(fn); setSelection(null); }} onClose={closeDialog} />
       )}
       {dialog === "examples" && (
         <Dialog title="Example circuits" onClose={() => setDialog(null)} style={{ width: 560 }}>

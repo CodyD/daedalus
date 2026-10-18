@@ -50,6 +50,8 @@ export interface AssistantHost {
   importDatasheet(req: ImportRequest, onProgress: (p: ImportProgress) => void, signal: AbortSignal): Promise<ImportOutcome>;
   /** Cost estimate; `subscription` when the import runs on the user's Claude Code plan. */
   estimateImport(req: ImportRequest): Promise<{ costUsd: number; pages: number; subscription: boolean }>;
+  /** Parts the active profile has on hand, as get_inventory reports them. */
+  inventory(): Promise<{ summary: string } & Record<string, unknown>>;
 }
 
 /** A tool both back ends can expose: Claude API (tool runner) or Claude Code (MCP). */
@@ -168,6 +170,22 @@ export class Assistant {
     };
 
     return [
+      {
+        name: "get_inventory",
+        description: "Parts the user already owns (their profile's inventory): name, library_id to place, value, package and quantity on hand. Check it before choosing parts and prefer these where they suit the design.",
+        schema: z.object({}),
+        run: async (_input, id) => {
+          host.emit({ type: "tool-start", id, name: "get_inventory", input: {} });
+          try {
+            const inv = await host.inventory();
+            host.emit({ type: "tool-end", id, ok: true, summary: inv.summary });
+            return json(inv);
+          } catch (e) {
+            host.emit({ type: "tool-end", id, ok: false, summary: (e as Error).message });
+            return json({ error: (e as Error).message });
+          }
+        },
+      },
       proxy("search_library",
         "Search the component library (built-in and previously imported parts). Returns ids to use with place_part. Empty query lists everything.",
         z.object({ query: z.string() })),

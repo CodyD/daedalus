@@ -1,4 +1,4 @@
-// Intel HEX loader (the format Arduino IDE, avr-gcc, MPLAB and Proteus all use
+// Intel HEX loader (the format Arduino IDE, avr-gcc and MPLAB all use
 // for the microcontroller "Program File" property).
 
 export function parseIntelHex(text: string): Uint8Array {

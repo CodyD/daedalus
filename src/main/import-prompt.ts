@@ -15,7 +15,7 @@ const BUILTIN_PINS: Record<string, string> = {
   power: "P (props NET, VOLTAGE)", ground: "GND",
 };
 
-export const IMPORT_SYSTEM_PROMPT = `You convert electronic component datasheets into simulation-ready component definitions for a mixed-mode circuit simulator (a Proteus VSM-style tool: SPICE analog solver + event-driven digital simulator + instruction-level MCU co-simulation).
+export const IMPORT_SYSTEM_PROMPT = `You convert electronic component datasheets into simulation-ready component definitions for a mixed-mode circuit simulator (SPICE analog solver + event-driven digital simulator + instruction-level MCU co-simulation).
 
 Read the attached datasheet and return one component definition for the part the user names (or the primary part of the datasheet). Your output is parsed against a JSON schema, then compiled by the simulator; compile errors are sent back to you to fix.
 
