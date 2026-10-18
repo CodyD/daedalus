@@ -69,7 +69,7 @@ High contrast and colour-blind safe palettes, interface scaling, reduced motion 
 ```
 npm install
 npm run dev          # Electron app with hot reload
-npm test             # 104 tests: solver, digital, AVR core, examples end-to-end
+npm test             # 106 tests: solver, digital, AVR core, examples end-to-end
 npm run build        # production bundle in out/
 npm run readme       # retake the screenshots and regenerate this README
 npx vite --config vite.renderer.config.ts   # renderer only, in a browser (no file dialogs / import)
@@ -79,7 +79,7 @@ Open **File → Examples…** to load one of the bundled circuits, then press **
 
 ### Parts and inventory service
 
-The app talks to the [daedalus-api](../daedalus-api) Worker at `https://daedalus-api.cd-cloud.workers.dev`. Set `DAEDALUS_API_URL` in `.env` (gitignored) to use another one (`http://localhost:8787` for `npm run dev` there), or set it empty to keep everything on this machine. The app keeps this install's imported parts and its profiles' inventory there; built-in parts always ship with the app. On first connection the app registers as an anonymous device: the API issues a random token, stored encrypted in `settings.json`, and keeps only its hash. Nothing about the machine or user is sent. Existing local profiles are uploaded once (the folder is then renamed `profiles-uploaded-*`). Datasheet PDFs stay on disk. If the API can't be reached, part saves are kept in the local library folder and uploaded on the next listing that connects, and the last listing and profiles read are cached so the library and inventory still load offline. Packaged builds read `.env` from the user data folder.
+The app talks to the [daedalus-api](../daedalus-api) Worker at `https://daedalus-api.cd-cloud.workers.dev`. Set `DAEDALUS_API_URL` in `.env` (gitignored) to use another one (`http://localhost:8787` for `npm run dev` there), or set it empty to keep everything on this machine. The app keeps this install's imported parts and its profiles' inventory there; built-in parts always ship with the app. On first connection the app registers as an anonymous device: the API issues a random token, stored encrypted in `settings.json`, and keeps only its hash. Nothing about the machine or user is sent. Existing local profiles are uploaded once (the folder is then renamed `profiles-uploaded-*`). **Parts Inventory → Pair Phone…** shows a QR code for the [inventory scanner](../daedalus-inventory-scanner) Android app, which adds parts by reading part numbers off chips and bag labels with the phone's camera. Paired phones are listed there and can be unpaired. Saving the inventory keeps anything a phone added while the dialog was open. Datasheet PDFs stay on disk. If the API can't be reached, part saves are kept in the local library folder and uploaded on the next listing that connects, and the last listing and profiles read are cached so the library and inventory still load offline. Packaged builds read `.env` from the user data folder.
 
 ## Examples
 
