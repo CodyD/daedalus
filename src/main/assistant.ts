@@ -15,7 +15,7 @@ import { isIP } from "node:net";
 import { join } from "node:path";
 import { z } from "zod";
 import type { ComponentDef } from "../shared/component";
-import { ASSISTANT_SYSTEM_PROMPT, AssistantPhase, INTERVIEW_TOOLS } from "./assistant-prompt";
+import { ASSISTANT_SYSTEM_PROMPT, AssistantPhase, BUILD_REQUEST, INTERVIEW_TOOLS } from "./assistant-prompt";
 import { runClaudeCode } from "./claude-code";
 import { MODEL } from "./datasheet";
 import type { ImportOutcome, ImportProgress, ImportRequest } from "./datasheet";
@@ -332,12 +332,29 @@ export class Assistant {
     if (this.abort) throw new Error("assistant is busy");
     const abort = new AbortController();
     this.abort = abort;
-    const tagged = `[${phase.toUpperCase()}] ${text}`;
+    let tagged = `[${phase.toUpperCase()}] ${text}`;
     try {
+      // Parts may have been added since the interview (e.g. from the scanner
+      // app), so a build starts from the inventory as the API has it now.
+      if (phase === "build" && text === BUILD_REQUEST) tagged += await this.currentInventory();
       if ((await this.host.provider()) === "claude-code") await this.sendViaClaudeCode(tagged, phase, abort);
       else await this.sendViaApi(tagged, phase, abort);
     } finally {
       this.abort = null;
+    }
+  }
+
+  /** Fetches the inventory and words it for the message; "" if it can't be read. */
+  private async currentInventory(): Promise<string> {
+    const id = `inventory-${Date.now().toString(36)}`;
+    this.host.emit({ type: "tool-start", id, name: "get_inventory", input: {} });
+    try {
+      const inv = await this.host.inventory();
+      this.host.emit({ type: "tool-end", id, ok: true, summary: inv.summary });
+      return `\n\nThe user's inventory as of now (this replaces any earlier get_inventory result):\n${json(inv)}`;
+    } catch (e) {
+      this.host.emit({ type: "tool-end", id, ok: false, summary: (e as Error).message });
+      return "";
     }
   }
 

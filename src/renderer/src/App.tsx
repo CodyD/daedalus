@@ -417,7 +417,11 @@ export function App() {
             busy={chatBusy}
             phase={chatPhase}
             onSend={(t) => sendChat(t)}
-            onBuild={() => { setChatPhase("build"); sendChat(BUILD_REQUEST, "build", "Build"); }}
+            onBuild={() => {
+              setChatPhase("build");
+              sendChat(BUILD_REQUEST, "build", "Build");
+              api().activeProfile().then(setProfile).catch(() => {});
+            }}
             onCancel={cancelChat}
             onReset={async () => { await api().assistantReset(); setChat([]); setChatPhase("interview"); }}
             onApproval={(k, yes) => answerUi(k, "approval", yes)}
